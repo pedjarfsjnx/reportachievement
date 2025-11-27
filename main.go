@@ -2,19 +2,40 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	// Inisialisasi aplikasi Fiber
+	// 1. Load .env
+	if err := godotenv.Load(); err != nil {
+		log.Println("Warning: .env file not found")
+	}
+
+	// 2. Init App
 	app := fiber.New()
 
-	// Tentukan rute (route) sederhana
+	// 3. Middlewares Dasar
+	app.Use(cors.New())
+	app.Use(logger.New())
+
+	// 4. Test Route
 	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Halo, World! This is Go Fiber!")
+		return c.JSON(fiber.Map{
+			"message": "Server Report Achievement berjalan!",
+			"status":  "success",
+		})
 	})
 
-	// Jalankan server di port 3000
-	log.Fatal(app.Listen(":3000"))
+	// 5. Listen
+	port := os.Getenv("APP_PORT")
+	if port == "" {
+		port = ":3000"
+	}
+
+	log.Fatal(app.Listen(port))
 }

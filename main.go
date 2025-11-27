@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+
+	// Import path menyesuaikan nama module Anda + folder database
+	"reportachievement/database/mongo"
+	"reportachievement/database/postgres"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -11,31 +16,32 @@ import (
 )
 
 func main() {
-	// 1. Load .env
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found")
 	}
 
-	// 2. Init App
-	app := fiber.New()
+	// 1. Init Database (Path Baru)
+	dbPostgres := postgres.Connect()
+	sqlDB, _ := dbPostgres.DB()
+	defer sqlDB.Close()
 
-	// 3. Middlewares Dasar
+	dbMongo := mongo.Connect()
+	defer func() {
+		if err := dbMongo.Client.Disconnect(context.TODO()); err != nil {
+			log.Panic(err)
+		}
+	}()
+
+	// 2. Init Fiber
+	app := fiber.New()
 	app.Use(cors.New())
 	app.Use(logger.New())
 
-	// 4. Test Route
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
-			"message": "Server Report Achievement berjalan!",
-			"status":  "success",
+			"message": "Server berjalan dengan struktur folder baru!",
 		})
 	})
 
-	// 5. Listen
-	port := os.Getenv("APP_PORT")
-	if port == "" {
-		port = ":3000"
-	}
-
-	log.Fatal(app.Listen(port))
+	log.Fatal(app.Listen(":" + os.Getenv("APP_PORT")))
 }

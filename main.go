@@ -5,12 +5,15 @@ import (
 	"log"
 	"os"
 
-	// Import package database lokal
+	"reportachievement/app/model/postgre"
 	"reportachievement/database/mongo"
 	"reportachievement/database/postgres"
 
-	// Import model untuk kebutuhan migrasi (Modul 3)
-	"reportachievement/app/model/postgre"
+	repoPostgre "reportachievement/app/repository/postgre"
+	"reportachievement/app/service"
+
+	// Import route dari folder ROOT (Path baru)
+	routePostgre "reportachievement/route/postgre"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -19,32 +22,20 @@ import (
 )
 
 func main() {
-	// 1. Load Environment Variables
+	// 1. Setup Env & DB
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found")
 	}
 
-	// 2. Inisialisasi Database PostgreSQL
 	dbPostgres := postgres.Connect()
 
-	// === AUTO MIGRATION (MODUL 3) ===
-	log.Println("⏳ Menjalankan Migrasi Database...")
-	err := dbPostgres.AutoMigrate(
-		&postgre.Role{},
-		&postgre.User{},
-		&postgre.Permission{},
-		&postgre.RolePermission{},
-	)
-	if err != nil {
-		log.Fatal("❌ Gagal Migrasi: ", err)
-	}
-	log.Println("✅ Migrasi Berhasil!")
-	// ================================
+	// AutoMigrate & Seeding
+	dbPostgres.AutoMigrate(&postgre.Role{}, &postgre.User{}, &postgre.Permission{}, &postgre.RolePermission{})
+	postgres.SeedDatabase(dbPostgres)
 
 	sqlDB, _ := dbPostgres.DB()
 	defer sqlDB.Close()
 
-	// 3. Inisialisasi Database MongoDB
 	dbMongo := mongo.Connect()
 	defer func() {
 		if err := dbMongo.Client.Disconnect(context.TODO()); err != nil {
@@ -52,23 +43,23 @@ func main() {
 		}
 	}()
 
-	// 4. Inisialisasi Fiber App
-	app := fiber.New()
+	// 2. Setup Dependency Injection (Layer App)
+	userRepo := repoPostgre.NewUserRepository(dbPostgres)
+	authService := service.NewAuthService(userRepo)
 
-	// 5. Middleware
+	// 3. Setup Fiber
+	app := fiber.New()
 	app.Use(cors.New())
 	app.Use(logger.New())
 
-	// 6. Test Route
+	// 4. Register Routes (Layer Route/Delivery)
+	routePostgre.RegisterAuthRoutes(app, authService)
+
 	app.Get("/", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"message":  "Server Report Achievement berjalan!",
-			"database": "PostgreSQL & MongoDB Connected",
-			"status":   "success",
-		})
+		return c.JSON(fiber.Map{"message": "Server Ready!"})
 	})
 
-	// 7. Jalankan Server
+	// 5. Run
 	port := os.Getenv("APP_PORT")
 	if port == "" {
 		port = ":3000"

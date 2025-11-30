@@ -9,7 +9,7 @@ import (
 )
 
 func SeedDatabase(db *gorm.DB) {
-	// 1. Seed Roles (Sesuai SRS Hal 4)
+	// 1. Seed Roles
 	roles := []postgre.Role{
 		{Name: "Admin", Description: "Pengelola sistem full access"},
 		{Name: "Mahasiswa", Description: "Pelapor prestasi"},
@@ -17,44 +17,53 @@ func SeedDatabase(db *gorm.DB) {
 	}
 
 	for _, role := range roles {
-		// FirstOrCreate: Buat data hanya jika belum ada (berdasarkan Name)
 		if err := db.Where("name = ?", role.Name).FirstOrCreate(&role).Error; err != nil {
 			log.Printf("❌ Gagal seed role %s: %v", role.Name, err)
 		}
 	}
-	log.Println("✅ Roles seeded (Data Role Aman)!")
+	log.Println("✅ Roles seeded!")
 
-	// 2. Seed Super Admin User (Hanya jika belum ada)
+	// 2. Seed Super Admin
 	var adminRole postgre.Role
-	// Cari Role ID untuk 'Admin' yang baru saja kita seed
-	if err := db.Where("name = ?", "Admin").First(&adminRole).Error; err != nil {
-		log.Printf("❌ Gagal mencari role Admin: %v", err)
-		return
+	db.Where("name = ?", "Admin").First(&adminRole)
+
+	hashedPassAdmin, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+	adminUser := postgre.User{
+		Username: "superadmin", Email: "admin@report.com", PasswordHash: string(hashedPassAdmin),
+		FullName: "Super Admin", RoleID: adminRole.ID, IsActive: true,
+	}
+	if err := db.Where("username = ?", "superadmin").FirstOrCreate(&adminUser).Error; err != nil {
+		log.Printf("❌ Gagal seed admin: %v", err)
 	}
 
-	// Cek apakah user superadmin sudah ada?
-	var count int64
-	db.Model(&postgre.User{}).Where("username = ?", "superadmin").Count(&count)
+	// === TAMBAHAN MODUL 7: SEED MAHASISWA ===
+	var mhsRole postgre.Role
+	db.Where("name = ?", "Mahasiswa").First(&mhsRole)
 
-	if count == 0 {
-		// Hash Password
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+	hashedPassMhs, _ := bcrypt.GenerateFromPassword([]byte("mhs123"), bcrypt.DefaultCost)
 
-		adminUser := postgre.User{
-			Username:     "superadmin",
-			Email:        "admin@report.com",
-			PasswordHash: string(hashedPassword),
-			FullName:     "Super Admin Sistem",
-			RoleID:       adminRole.ID, // Link ke Role Admin
-			IsActive:     true,
-		}
+	// A. Buat User Mahasiswa
+	mhsUser := postgre.User{
+		Username: "mahasiswa1", Email: "mhs1@student.unair.ac.id", PasswordHash: string(hashedPassMhs),
+		FullName: "Budi Santoso", RoleID: mhsRole.ID, IsActive: true,
+	}
 
-		if err := db.Create(&adminUser).Error; err != nil {
-			log.Printf("❌ Gagal create admin: %v", err)
-		} else {
-			log.Println("✅ Super Admin user created! (User: superadmin / Pass: admin123)")
-		}
+	// Simpan User dulu
+	if err := db.Where("username = ?", "mahasiswa1").FirstOrCreate(&mhsUser).Error; err != nil {
+		log.Printf("❌ Gagal seed user mahasiswa: %v", err)
 	} else {
-		log.Println("ℹ️ Super Admin user sudah ada.")
+		// B. Buat Profile Student (Relasi ke User)
+		studentProfile := postgre.Student{
+			UserID:       mhsUser.ID,
+			NIM:          "082011633001",
+			ProgramStudy: "D4 Teknik Informatika",
+			AcademicYear: "2024",
+		}
+		// FirstOrCreate berdasarkan NIM agar tidak duplikat
+		if err := db.Where("nim = ?", "082011633001").FirstOrCreate(&studentProfile).Error; err != nil {
+			log.Printf("❌ Gagal seed profile student: %v", err)
+		} else {
+			log.Println("✅ Dummy Mahasiswa created! (User: mahasiswa1 / Pass: mhs123)")
+		}
 	}
 }

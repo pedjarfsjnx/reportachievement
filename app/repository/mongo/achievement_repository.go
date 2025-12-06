@@ -29,7 +29,7 @@ func (r *AchievementRepository) Insert(ctx context.Context, data *mongo.Achievem
 	return result.InsertedID.(primitive.ObjectID).Hex(), nil
 }
 
-// 2. Method FindByIDs (Bulk Read)
+// 2. Method FindByIDs
 func (r *AchievementRepository) FindByIDs(ctx context.Context, ids []string) ([]mongo.Achievement, error) {
 	var objectIDs []primitive.ObjectID
 
@@ -40,10 +40,9 @@ func (r *AchievementRepository) FindByIDs(ctx context.Context, ids []string) ([]
 		}
 	}
 
-	// Filter: Ambil ID yang diminta DAN belum didelete
 	filter := bson.M{
 		"_id":        bson.M{"$in": objectIDs},
-		"deleted_at": bson.M{"$exists": false}, // Penting: Jangan ambil yang sudah didelete
+		"deleted_at": bson.M{"$exists": false},
 	}
 
 	cursor, err := r.Coll.Find(ctx, filter)
@@ -60,7 +59,7 @@ func (r *AchievementRepository) FindByIDs(ctx context.Context, ids []string) ([]
 	return achievements, nil
 }
 
-// 3. Method SoftDelete (BARU - MODUL 9)
+// 3. Method SoftDelete
 func (r *AchievementRepository) SoftDelete(ctx context.Context, id string) error {
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -71,6 +70,25 @@ func (r *AchievementRepository) SoftDelete(ctx context.Context, id string) error
 	update := bson.M{
 		"$set": bson.M{
 			"deleted_at": time.Now(),
+		},
+	}
+
+	_, err = r.Coll.UpdateOne(ctx, filter, update)
+	return err
+}
+
+// Push Attachment ---
+func (r *AchievementRepository) AddAttachment(ctx context.Context, id string, attachment mongo.Attachment) error {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{"_id": objID}
+	// Gunakan $push untuk menambah item ke array attachments
+	update := bson.M{
+		"$push": bson.M{
+			"attachments": attachment,
 		},
 	}
 

@@ -7,7 +7,7 @@ import (
 )
 
 // SRS Halaman 5: 3.1.7 Tabel achievement_references [cite: 92]
-// Ditambah status 'deleted' sesuai request FR-005
+// Ditambah status 'deleted'
 type AchievementReference struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	StudentID uuid.UUID `gorm:"type:uuid;not null"`

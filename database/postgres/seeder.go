@@ -36,7 +36,6 @@ func SeedDatabase(db *gorm.DB) {
 		log.Printf("❌ Gagal seed admin: %v", err)
 	}
 
-	// === TAMBAHAN MODUL 7: SEED MAHASISWA ===
 	var mhsRole postgre.Role
 	db.Where("name = ?", "Mahasiswa").First(&mhsRole)
 

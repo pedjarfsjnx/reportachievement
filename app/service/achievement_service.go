@@ -57,17 +57,22 @@ type AchievementListResponse struct {
 	CreatedAt   string                 `json:"created_at"`
 }
 
+// DTO Baru untuk File
+type AttachmentDTO struct {
+	FileName string
+	FileURL  string
+	FileType string
+}
+
 // --- METHODS ---
 
 // 1. CREATE ACHIEVEMENT
 func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req CreateAchievementRequest) (*postgreModel.AchievementReference, error) {
-	// A. Cari Student Profile berdasarkan User ID
 	student, err := s.studentRepo.FindByUserID(userID)
 	if err != nil {
 		return nil, errors.New("student profile not found")
 	}
 
-	// B. Siapkan Data MongoDB
 	mongoData := &mongoModel.Achievement{
 		ID:                primitive.NewObjectID(),
 		StudentPostgresID: student.ID.String(),
@@ -78,15 +83,14 @@ func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req C
 		Points:            req.Points,
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
+		Attachments:       []mongoModel.Attachment{}, // Init array kosong
 	}
 
-	// C. Simpan ke MongoDB -> Dapat ID String
 	mongoID, err := s.achMongoRepo.Insert(ctx, mongoData)
 	if err != nil {
 		return nil, errors.New("failed to save to mongodb: " + err.Error())
 	}
 
-	// D. Siapkan Data PostgreSQL
 	pgData := &postgreModel.AchievementReference{
 		StudentID:          student.ID,
 		MongoAchievementID: mongoID,
@@ -95,7 +99,6 @@ func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req C
 		UpdatedAt:          time.Now(),
 	}
 
-	// E. Simpan ke PostgreSQL
 	if err := s.achRefRepo.Create(pgData); err != nil {
 		return nil, errors.New("failed to save reference: " + err.Error())
 	}
@@ -193,8 +196,6 @@ func (s *AchievementService) Delete(ctx context.Context, userID uuid.UUID, achie
 	return nil
 }
 
-// --- BARU (MODUL 10): SUBMIT, VERIFY, REJECT ---
-
 // 4. SUBMIT (Mahasiswa)
 func (s *AchievementService) Submit(ctx context.Context, userID uuid.UUID, achievementID uuid.UUID) error {
 	ach, err := s.achRefRepo.FindByID(achievementID)
@@ -264,4 +265,37 @@ func (s *AchievementService) Reject(ctx context.Context, lecturerUserID uuid.UUI
 	}
 
 	return s.achRefRepo.VerifyOrReject(ach.ID, updateData)
+}
+
+// UPLOAD EVIDENCE ---
+func (s *AchievementService) UploadEvidence(ctx context.Context, userID uuid.UUID, achievementID uuid.UUID, file AttachmentDTO) error {
+	// A. Cek Kepemilikan & Status
+	ach, err := s.achRefRepo.FindByID(achievementID)
+	if err != nil {
+		return errors.New("achievement not found")
+	}
+
+	student, err := s.studentRepo.FindByUserID(userID)
+	if err != nil {
+		return errors.New("student profile not found")
+	}
+
+	if ach.StudentID != student.ID {
+		return errors.New("unauthorized action")
+	}
+
+	// Boleh upload jika status draft atau rejected (untuk perbaikan)
+	if ach.Status != "draft" && ach.Status != "rejected" {
+		return errors.New("cannot upload evidence for status: " + ach.Status)
+	}
+
+	// B. Simpan Metadata ke MongoDB
+	attachment := mongoModel.Attachment{
+		FileName:   file.FileName,
+		FileURL:    file.FileURL,
+		FileType:   file.FileType,
+		UploadedAt: time.Now(),
+	}
+
+	return s.achMongoRepo.AddAttachment(ctx, ach.MongoAchievementID, attachment)
 }

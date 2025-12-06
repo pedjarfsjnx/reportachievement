@@ -23,8 +23,6 @@ type Student struct {
 	UserID uuid.UUID `gorm:"type:uuid;not null"`
 	User   User      `gorm:"foreignKey:UserID"`
 
-	// --- PERBAIKAN DI SINI ---
-	// Ganti "StudentID" menjadi "NIM" agar GORM tidak bingung dengan Foreign Key
 	NIM string `gorm:"type:varchar(20);unique;not null"`
 	// -------------------------
 

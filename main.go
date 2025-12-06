@@ -8,51 +8,37 @@ import (
 	"reportachievement/database/mongo"
 	"reportachievement/database/postgres"
 
-	// Models (Domain Layer)
 	"reportachievement/app/model/postgre"
 
-	// Repositories (Data Layer)
 	repoMongo "reportachievement/app/repository/mongo"
 	repoPostgre "reportachievement/app/repository/postgre"
 
-	// Services (Business Logic Layer)
 	"reportachievement/app/service"
 
-	// Routes (Transport Layer - DI LUAR APP)
 	routePostgre "reportachievement/route/postgre"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
 )
 
 func main() {
-	// 1. Load Env
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found")
 	}
 
-	// 2. Init DB Postgres
+	// 1. Init DB
 	dbPostgres := postgres.Connect()
-
-	// AutoMigrate
-	log.Println("⏳ Menjalankan Migrasi Database...")
-	err := dbPostgres.AutoMigrate(
+	dbPostgres.AutoMigrate(
 		&postgre.Role{}, &postgre.User{}, &postgre.Permission{}, &postgre.RolePermission{},
 		&postgre.Lecturer{}, &postgre.Student{}, &postgre.AchievementReference{},
 	)
-	if err != nil {
-		log.Fatal("❌ Gagal Migrasi: ", err)
-	}
-
-	// Seeding
 	postgres.SeedDatabase(dbPostgres)
-
 	sqlDB, _ := dbPostgres.DB()
 	defer sqlDB.Close()
 
-	// 3. Init DB Mongo
 	dbMongo := mongo.Connect()
 	defer func() {
 		if err := dbMongo.Client.Disconnect(context.TODO()); err != nil {
@@ -60,33 +46,43 @@ func main() {
 		}
 	}()
 
-	// 4. Setup Dependency Injection
-	// --- AUTH Module ---
+	// 2. Dependency Injection
 	userRepo := repoPostgre.NewUserRepository(dbPostgres)
 	authService := service.NewAuthService(userRepo)
 
-	// --- ACHIEVEMENT Module ---
 	studentRepo := repoPostgre.NewStudentRepository(dbPostgres)
 	achRefRepo := repoPostgre.NewAchievementRepository(dbPostgres)
 	achMongoRepo := repoMongo.NewAchievementRepository(dbMongo.Db)
 
 	achService := service.NewAchievementService(studentRepo, achRefRepo, achMongoRepo)
 
-	// 5. Setup Fiber
-	app := fiber.New()
-	app.Use(cors.New())
-	app.Use(logger.New())
+	// 3. Init Fiber
+	app := fiber.New(fiber.Config{
+		// Naikkan limit jadi 50MB agar aman
+		BodyLimit: 50 * 1024 * 1024,
+	})
 
-	// 6. Register Routes
+	// --- MIDDLEWARE ---
+	app.Use(logger.New())  // Log dulu biar kelihatan request masuk
+	app.Use(recover.New()) // Tangkap panic
+	app.Use(cors.New())    // Handle CORS
+
+	// 4. Folder Upload
+	if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
+		log.Println("📂 Membuat folder uploads...")
+		os.Mkdir("./uploads", 0755)
+	}
+	app.Static("/uploads", "./uploads")
+
+	// 5. Routes
 	routePostgre.RegisterAuthRoutes(app, authService)
 	routePostgre.RegisterAchievementRoutes(app, achService)
 
-	// Default Route
 	app.Get("/", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "Server Report Achievement berjalan!"})
+		return c.JSON(fiber.Map{"message": "Server OK"})
 	})
 
-	// 7. Run Server
+	// 6. Run
 	port := os.Getenv("APP_PORT")
 	if port == "" {
 		port = ":3000"

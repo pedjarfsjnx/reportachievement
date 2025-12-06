@@ -72,7 +72,6 @@ func (r *AchievementRepository) UpdateStatus(id uuid.UUID, status string) error 
 	return r.db.Model(&postgre.AchievementReference{}).Where("id = ?", id).Update("status", status).Error
 }
 
-// --- BARU (MODUL 10): Update Status Lengkap (Verifikasi/Reject/Submit) ---
 func (r *AchievementRepository) VerifyOrReject(id uuid.UUID, data map[string]interface{}) error {
 	// Updates memungkinkan kita update beberapa field sekaligus (status, verified_at, verified_by, rejection_note)
 	return r.db.Model(&postgre.AchievementReference{}).Where("id = ?", id).Updates(data).Error

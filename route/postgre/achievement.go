@@ -1,12 +1,9 @@
 package postgre
 
 import (
-	// --- FIX IMPORT DI SINI ---
-	// Mengarah ke folder root "middleware", BUKAN "app/middleware"
-	"reportachievement/middleware"
-
-	"reportachievement/app/repository/postgre" // Import untuk Filter Struct (Modul 8)
+	"reportachievement/app/repository/postgre"
 	"reportachievement/app/service"
+	"reportachievement/middleware"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -16,12 +13,12 @@ import (
 func RegisterAchievementRoutes(app *fiber.App, achievementService *service.AchievementService) {
 	api := app.Group("/api/v1/achievements")
 
-	// 1. Endpoint CREATE (Modul 7)
+	// 1. CREATE
 	api.Post("/", middleware.Protected(), func(c *fiber.Ctx) error {
 		userIDStr := c.Locals("user_id").(string)
 		userID, err := uuid.Parse(userIDStr)
 		if err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "Invalid User ID in token"})
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid User ID"})
 		}
 
 		var req service.CreateAchievementRequest
@@ -41,32 +38,23 @@ func RegisterAchievementRoutes(app *fiber.App, achievementService *service.Achie
 		})
 	})
 
-	// 2. Endpoint GET ALL / LIST (Modul 8)
+	// 2. GET LIST
 	api.Get("/", middleware.Protected(), func(c *fiber.Ctx) error {
-		// Ambil Role dari Token (untuk logic authorization nanti)
-		// role := c.Locals("role").(string)
-
-		// Parse Query Params untuk Pagination & Filter
 		page, _ := strconv.Atoi(c.Query("page", "1"))
 		limit, _ := strconv.Atoi(c.Query("limit", "10"))
-		status := c.Query("status") // e.g. ?status=draft
+		status := c.Query("status")
 
-		// Siapkan filter
 		filter := postgre.AchievementFilter{
 			Page:   page,
 			Limit:  limit,
 			Status: status,
-			// Jika nanti ingin filter berdasarkan user login (untuk mahasiswa),
-			// kita bisa tambahkan StudentID di sini.
 		}
 
-		// Panggil Service GetAll
 		data, total, err := achievementService.GetAll(c.Context(), filter)
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
 
-		// Return JSON Response
 		return c.JSON(fiber.Map{
 			"status": "success",
 			"data":   data,
@@ -75,6 +63,32 @@ func RegisterAchievementRoutes(app *fiber.App, achievementService *service.Achie
 				"limit": limit,
 				"total": total,
 			},
+		})
+	})
+
+	// 3. DELETE (BARU - MODUL 9)
+	api.Delete("/:id", middleware.Protected(), func(c *fiber.Ctx) error {
+		userIDStr := c.Locals("user_id").(string)
+		userID, err := uuid.Parse(userIDStr)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid User ID"})
+		}
+
+		// Ambil ID Prestasi dari URL Parameter
+		achIDStr := c.Params("id")
+		achID, err := uuid.Parse(achIDStr)
+		if err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid Achievement ID UUID"})
+		}
+
+		// Panggil Service Delete
+		if err := achievementService.Delete(c.Context(), userID, achID); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+		}
+
+		return c.JSON(fiber.Map{
+			"status":  "success",
+			"message": "Achievement soft deleted successfully",
 		})
 	})
 }

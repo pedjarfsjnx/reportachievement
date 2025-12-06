@@ -3,6 +3,7 @@ package mongo
 import (
 	"context"
 	"reportachievement/app/model/mongo"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -19,21 +20,19 @@ func NewAchievementRepository(db *mongoDriver.Database) *AchievementRepository {
 	}
 }
 
-// 1. Method INSERT (Dari Modul 7) - WAJIB ADA
+// 1. Method INSERT
 func (r *AchievementRepository) Insert(ctx context.Context, data *mongo.Achievement) (string, error) {
 	result, err := r.Coll.InsertOne(ctx, data)
 	if err != nil {
 		return "", err
 	}
-	// Kembalikan ID yang baru dibuat sebagai Hex String
 	return result.InsertedID.(primitive.ObjectID).Hex(), nil
 }
 
-// 2. Method FindByIDs (Dari Modul 8)
+// 2. Method FindByIDs (Bulk Read)
 func (r *AchievementRepository) FindByIDs(ctx context.Context, ids []string) ([]mongo.Achievement, error) {
 	var objectIDs []primitive.ObjectID
 
-	// Convert string ID ke ObjectID Mongo
 	for _, id := range ids {
 		objID, err := primitive.ObjectIDFromHex(id)
 		if err == nil {
@@ -41,8 +40,11 @@ func (r *AchievementRepository) FindByIDs(ctx context.Context, ids []string) ([]
 		}
 	}
 
-	// Query: WHERE _id IN (id1, id2, ...)
-	filter := bson.M{"_id": bson.M{"$in": objectIDs}}
+	// Filter: Ambil ID yang diminta DAN belum didelete
+	filter := bson.M{
+		"_id":        bson.M{"$in": objectIDs},
+		"deleted_at": bson.M{"$exists": false}, // Penting: Jangan ambil yang sudah didelete
+	}
 
 	cursor, err := r.Coll.Find(ctx, filter)
 	if err != nil {
@@ -56,4 +58,22 @@ func (r *AchievementRepository) FindByIDs(ctx context.Context, ids []string) ([]
 	}
 
 	return achievements, nil
+}
+
+// 3. Method SoftDelete (BARU - MODUL 9)
+func (r *AchievementRepository) SoftDelete(ctx context.Context, id string) error {
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{"_id": objID}
+	update := bson.M{
+		"$set": bson.M{
+			"deleted_at": time.Now(),
+		},
+	}
+
+	_, err = r.Coll.UpdateOne(ctx, filter, update)
+	return err
 }

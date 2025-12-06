@@ -3,6 +3,7 @@ package postgre
 import (
 	"reportachievement/app/model/postgre"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -14,11 +15,12 @@ func NewAchievementRepository(db *gorm.DB) *AchievementRepository {
 	return &AchievementRepository{db: db}
 }
 
+// Create
 func (r *AchievementRepository) Create(data *postgre.AchievementReference) error {
 	return r.db.Create(data).Error
 }
 
-// TAMBAHAN MODUL 8: Filter Parameter
+// Filter Struct
 type AchievementFilter struct {
 	StudentID string
 	Status    string
@@ -26,29 +28,46 @@ type AchievementFilter struct {
 	Limit     int
 }
 
+// FindAll (List)
 func (r *AchievementRepository) FindAll(filter AchievementFilter) ([]postgre.AchievementReference, int64, error) {
 	var achievements []postgre.AchievementReference
 	var total int64
 
 	query := r.db.Model(&postgre.AchievementReference{})
 
-	// Apply Filters
 	if filter.StudentID != "" {
 		query = query.Where("student_id = ?", filter.StudentID)
 	}
+	// Jangan tampilkan status 'deleted' di list biasa
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
+	} else {
+		query = query.Where("status != ?", "deleted")
 	}
 
-	// Hitung total data (untuk pagination)
 	query.Count(&total)
 
-	// Preload Relasi: Student -> User, Verifier -> User
 	query = query.Preload("Student.User").Preload("Student").Preload("Verifier")
 
-	// Apply Pagination
 	offset := (filter.Page - 1) * filter.Limit
 	err := query.Offset(offset).Limit(filter.Limit).Order("created_at DESC").Find(&achievements).Error
 
 	return achievements, total, err
+}
+
+// --- BARU - MODUL 9 ---
+
+// FindByID (Untuk detail & cek ownership)
+func (r *AchievementRepository) FindByID(id uuid.UUID) (*postgre.AchievementReference, error) {
+	var ach postgre.AchievementReference
+	err := r.db.Preload("Student").First(&ach, "id = ?", id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &ach, nil
+}
+
+// UpdateStatus (Untuk mengubah jadi 'deleted')
+func (r *AchievementRepository) UpdateStatus(id uuid.UUID, status string) error {
+	return r.db.Model(&postgre.AchievementReference{}).Where("id = ?", id).Update("status", status).Error
 }

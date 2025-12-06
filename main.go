@@ -22,7 +22,22 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
+
+	// Import Swagger
+	_ "reportachievement/docs" // Folder ini akan dibuat otomatis oleh 'swag init'
+
+	"github.com/gofiber/swagger"
 )
+
+// @title           Sistem Pelaporan Prestasi Mahasiswa API
+// @version         1.0
+// @description     Dokumentasi API untuk Project UAS Backend Lanjut.
+// @contact.name    Tim Pengembang
+// @host            localhost:3000
+// @BasePath        /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 
 func main() {
 	if err := godotenv.Load(); err != nil {
@@ -46,46 +61,42 @@ func main() {
 		}
 	}()
 
-	// 2. Dependency Injection
-
-	// -- REPOSITORIES --
+	// 2. DI (Dependency Injection)
 	userRepo := repoPostgre.NewUserRepository(dbPostgres)
 	studentRepo := repoPostgre.NewStudentRepository(dbPostgres)
 	achRefRepo := repoPostgre.NewAchievementRepository(dbPostgres)
 	achMongoRepo := repoMongo.NewAchievementRepository(dbMongo.Db)
 
-	// -- SERVICES --
 	authService := service.NewAuthService(userRepo)
-	userService := service.NewUserService(userRepo) // <-- SERVICE BARU (MODUL 12)
+	userService := service.NewUserService(userRepo)
 	achService := service.NewAchievementService(studentRepo, achRefRepo, achMongoRepo)
+	reportService := service.NewReportService(achMongoRepo, studentRepo)
 
 	// 3. Init Fiber
 	app := fiber.New(fiber.Config{
 		BodyLimit: 50 * 1024 * 1024,
 	})
 
-	// --- MIDDLEWARE ---
 	app.Use(recover.New())
 	app.Use(cors.New())
 	app.Use(logger.New())
 
-	// 4. Folder Upload
+	// 4. Static Files
 	if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
-		log.Println("📂 Membuat folder uploads...")
 		os.Mkdir("./uploads", 0755)
 	}
 	app.Static("/uploads", "./uploads")
 
-	// 5. Register Routes
+	// 5. Swagger Route
+	app.Get("/swagger/*", swagger.HandlerDefault)
+
+	// 6. Register API Routes
 	routePostgre.RegisterAuthRoutes(app, authService)
 	routePostgre.RegisterAchievementRoutes(app, achService)
-	routePostgre.RegisterUserRoutes(app, userService) // <-- ROUTE BARU (MODUL 12)
+	routePostgre.RegisterUserRoutes(app, userService)
+	routePostgre.RegisterReportRoutes(app, reportService)
 
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "Server Report Achievement berjalan!"})
-	})
-
-	// 6. Run
+	// 7. Run
 	port := os.Getenv("APP_PORT")
 	if port == "" {
 		port = ":3000"

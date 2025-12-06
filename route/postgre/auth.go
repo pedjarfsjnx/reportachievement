@@ -6,43 +6,48 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// Request Body Struct (Didefinisikan di sini karena hanya dipakai di route ini)
-type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+type AuthHandler struct {
+	Service *service.AuthService
 }
 
-// Fungsi ini menerima App (Fiber) dan Service yang dibutuhkan
-func RegisterAuthRoutes(app *fiber.App, authService *service.AuthService) {
+// Struct Request Body (Exported agar terbaca Swagger)
+type LoginRequest struct {
+	Username string `json:"username" example:"superadmin"`
+	Password string `json:"password" example:"admin123"`
+}
 
+func RegisterAuthRoutes(app *fiber.App, authService *service.AuthService) {
+	h := &AuthHandler{Service: authService}
 	api := app.Group("/api/v1/auth")
 
-	// POST /api/v1/auth/login
-	api.Post("/login", func(c *fiber.Ctx) error {
-		// 1. Parsing Request Body
-		var req LoginRequest
-		if err := c.BodyParser(&req); err != nil {
-			return c.Status(400).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Invalid request body",
-			})
-		}
+	api.Post("/login", h.Login)
+}
 
-		// 2. Panggil Service Login
-		resp, err := authService.Login(req.Username, req.Password)
-		if err != nil {
-			// Jika gagal login (password salah / user tak ada)
-			return c.Status(401).JSON(fiber.Map{
-				"status":  "error",
-				"message": err.Error(),
-			})
-		}
+// Login godoc
+// @Summary      Masuk ke sistem
+// @Description  Autentikasi user dan mendapatkan JWT Token
+// @Tags         Authentication
+// @Accept       json
+// @Produce      json
+// @Param        request body LoginRequest true "Login Credentials"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      401  {object}  map[string]interface{}
+// @Router       /auth/login [post]
+func (h *AuthHandler) Login(c *fiber.Ctx) error {
+	var req LoginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"status": "error", "message": "Invalid request body"})
+	}
 
-		// 3. Return Success JSON
-		return c.JSON(fiber.Map{
-			"status":  "success",
-			"message": "Login successful",
-			"data":    resp,
-		})
+	resp, err := h.Service.Login(req.Username, req.Password)
+	if err != nil {
+		return c.Status(401).JSON(fiber.Map{"status": "error", "message": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "Login successful",
+		"data":    resp,
 	})
 }

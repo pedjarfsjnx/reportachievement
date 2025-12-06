@@ -1,0 +1,366 @@
+basePath: /api/v1
+definitions:
+  postgre.LoginRequest:
+    properties:
+      password:
+        example: admin123
+        type: string
+      username:
+        example: superadmin
+        type: string
+    type: object
+  service.CreateAchievementRequest:
+    properties:
+      description:
+        type: string
+      details:
+        additionalProperties: true
+        type: object
+      points:
+        type: integer
+      title:
+        type: string
+      type:
+        type: string
+    type: object
+  service.CreateUserRequest:
+    properties:
+      academic_year:
+        description: Jika Mahasiswa
+        type: string
+      department:
+        description: Jika Dosen
+        type: string
+      email:
+        type: string
+      full_name:
+        type: string
+      lecturer_id:
+        description: Jika Dosen (NIP/NIDN)
+        type: string
+      nim:
+        description: 'Opsional: Data Profil'
+        type: string
+      password:
+        type: string
+      program_study:
+        description: Jika Mahasiswa
+        type: string
+      role:
+        description: '"Admin", "Mahasiswa", "Dosen Wali"'
+        type: string
+      username:
+        type: string
+    type: object
+  service.UpdateUserRequest:
+    properties:
+      email:
+        type: string
+      full_name:
+        type: string
+      is_active:
+        description: Pointer agar bisa detect false
+        type: boolean
+    type: object
+host: localhost:3000
+info:
+  contact:
+    name: Tim Pengembang
+  description: Dokumentasi API untuk Project UAS Backend Lanjut.
+  title: Sistem Pelaporan Prestasi Mahasiswa API
+  version: "1.0"
+paths:
+  /achievements:
+    get:
+      description: Melihat list prestasi dengan pagination dan filter
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - description: Status Filter
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Lihat Daftar Prestasi
+      tags:
+      - Achievement
+    post:
+      consumes:
+      - application/json
+      description: Mahasiswa membuat draft prestasi baru
+      parameters:
+      - description: Data Prestasi
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.CreateAchievementRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Buat Draft Prestasi
+      tags:
+      - Achievement
+  /achievements/{id}:
+    delete:
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Hapus Prestasi (Soft Delete)
+      tags:
+      - Achievement
+  /achievements/{id}/attachments:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File Bukti
+        in: formData
+        name: file
+        required: true
+        type: file
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Upload Bukti Prestasi
+      tags:
+      - Achievement
+  /achievements/{id}/reject:
+    post:
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Note Penolakan
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Tolak Prestasi (Dosen)
+      tags:
+      - Workflow
+  /achievements/{id}/submit:
+    post:
+      description: Mengubah status draft menjadi submitted
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Submit Prestasi
+      tags:
+      - Workflow
+  /achievements/{id}/verify:
+    post:
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Verifikasi Prestasi (Dosen)
+      tags:
+      - Workflow
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Autentikasi user dan mendapatkan JWT Token
+      parameters:
+      - description: Login Credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/postgre.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Masuk ke sistem
+      tags:
+      - Authentication
+  /reports/statistics:
+    get:
+      description: Melihat ranking dan statistik prestasi
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Dashboard Statistik
+      tags:
+      - Reporting
+  /users:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List Semua User (Admin)
+      tags:
+      - User Management
+    post:
+      parameters:
+      - description: User Data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.CreateUserRequest'
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Buat User Baru (Admin)
+      tags:
+      - User Management
+  /users/{id}:
+    delete:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Hapus User (Admin)
+      tags:
+      - User Management
+    put:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Update Data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.UpdateUserRequest'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update User (Admin)
+      tags:
+      - User Management
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

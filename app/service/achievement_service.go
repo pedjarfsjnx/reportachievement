@@ -8,8 +8,11 @@ import (
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
+	// Import Models
 	mongoModel "reportachievement/app/model/mongo"
 	postgreModel "reportachievement/app/model/postgre"
+
+	// Import Repositories
 	mongoRepo "reportachievement/app/repository/mongo"
 	postgreRepo "reportachievement/app/repository/postgre"
 )
@@ -33,6 +36,7 @@ func NewAchievementService(
 }
 
 // --- STRUCTS (DTO) ---
+
 type CreateAchievementRequest struct {
 	Title       string                 `json:"title"`
 	Type        string                 `json:"type"`
@@ -55,13 +59,15 @@ type AchievementListResponse struct {
 
 // --- METHODS ---
 
-// 1. Create (Modul 7)
+// 1. CREATE ACHIEVEMENT
 func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req CreateAchievementRequest) (*postgreModel.AchievementReference, error) {
+	// A. Cari Student Profile berdasarkan User ID
 	student, err := s.studentRepo.FindByUserID(userID)
 	if err != nil {
 		return nil, errors.New("student profile not found")
 	}
 
+	// B. Siapkan Data MongoDB
 	mongoData := &mongoModel.Achievement{
 		ID:                primitive.NewObjectID(),
 		StudentPostgresID: student.ID.String(),
@@ -74,11 +80,13 @@ func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req C
 		UpdatedAt:         time.Now(),
 	}
 
+	// C. Simpan ke MongoDB -> Dapat ID String
 	mongoID, err := s.achMongoRepo.Insert(ctx, mongoData)
 	if err != nil {
 		return nil, errors.New("failed to save to mongodb: " + err.Error())
 	}
 
+	// D. Siapkan Data PostgreSQL
 	pgData := &postgreModel.AchievementReference{
 		StudentID:          student.ID,
 		MongoAchievementID: mongoID,
@@ -87,6 +95,7 @@ func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req C
 		UpdatedAt:          time.Now(),
 	}
 
+	// E. Simpan ke PostgreSQL
 	if err := s.achRefRepo.Create(pgData); err != nil {
 		return nil, errors.New("failed to save reference: " + err.Error())
 	}
@@ -94,7 +103,7 @@ func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req C
 	return pgData, nil
 }
 
-// 2. Get All (Modul 8)
+// 2. GET ALL ACHIEVEMENTS
 func (s *AchievementService) GetAll(ctx context.Context, filter postgreRepo.AchievementFilter) ([]AchievementListResponse, int64, error) {
 	pgData, total, err := s.achRefRepo.FindAll(filter)
 	if err != nil {
@@ -144,7 +153,6 @@ func (s *AchievementService) GetAll(ctx context.Context, filter postgreRepo.Achi
 			res.Points = mongoDetail.Points
 			res.Details = mongoDetail.Details
 		} else {
-			// Data mongo mungkin kena soft delete atau hilang
 			res.Title = "[Deleted or Missing]"
 		}
 
@@ -154,15 +162,13 @@ func (s *AchievementService) GetAll(ctx context.Context, filter postgreRepo.Achi
 	return response, total, nil
 }
 
-// 3. Delete (BARU - MODUL 9)
+// 3. DELETE (Soft Delete)
 func (s *AchievementService) Delete(ctx context.Context, userID uuid.UUID, achievementID uuid.UUID) error {
-	// A. Cari Data Prestasi
 	ach, err := s.achRefRepo.FindByID(achievementID)
 	if err != nil {
 		return errors.New("achievement not found")
 	}
 
-	// B. Cek Ownership (Validasi apakah Student yg login adalah pemilik prestasi)
 	student, err := s.studentRepo.FindByUserID(userID)
 	if err != nil {
 		return errors.New("student profile not found")
@@ -172,20 +178,90 @@ func (s *AchievementService) Delete(ctx context.Context, userID uuid.UUID, achie
 		return errors.New("unauthorized: you do not own this achievement")
 	}
 
-	// C. Cek Status (Hanya boleh hapus DRAFT)
 	if ach.Status != "draft" {
 		return errors.New("cannot delete achievement with status: " + ach.Status)
 	}
 
-	// D. Soft Delete di MongoDB
 	if err := s.achMongoRepo.SoftDelete(ctx, ach.MongoAchievementID); err != nil {
 		return errors.New("failed to delete mongo data: " + err.Error())
 	}
 
-	// E. Update Status di PostgreSQL jadi 'deleted'
 	if err := s.achRefRepo.UpdateStatus(ach.ID, "deleted"); err != nil {
 		return errors.New("failed to update status: " + err.Error())
 	}
 
 	return nil
+}
+
+// --- BARU (MODUL 10): SUBMIT, VERIFY, REJECT ---
+
+// 4. SUBMIT (Mahasiswa)
+func (s *AchievementService) Submit(ctx context.Context, userID uuid.UUID, achievementID uuid.UUID) error {
+	ach, err := s.achRefRepo.FindByID(achievementID)
+	if err != nil {
+		return errors.New("achievement not found")
+	}
+
+	student, err := s.studentRepo.FindByUserID(userID)
+	if err != nil {
+		return errors.New("student profile not found")
+	}
+	if ach.StudentID != student.ID {
+		return errors.New("unauthorized action")
+	}
+
+	if ach.Status != "draft" {
+		return errors.New("only draft achievement can be submitted")
+	}
+
+	now := time.Now()
+	updateData := map[string]interface{}{
+		"status":       "submitted",
+		"submitted_at": &now,
+	}
+
+	return s.achRefRepo.VerifyOrReject(ach.ID, updateData)
+}
+
+// 5. VERIFY (Dosen Wali)
+func (s *AchievementService) Verify(ctx context.Context, lecturerUserID uuid.UUID, achievementID uuid.UUID) error {
+	ach, err := s.achRefRepo.FindByID(achievementID)
+	if err != nil {
+		return errors.New("achievement not found")
+	}
+
+	if ach.Status != "submitted" {
+		return errors.New("achievement is not in submitted status")
+	}
+
+	now := time.Now()
+	updateData := map[string]interface{}{
+		"status":      "verified",
+		"verified_at": &now,
+		"verified_by": lecturerUserID,
+	}
+
+	return s.achRefRepo.VerifyOrReject(ach.ID, updateData)
+}
+
+// 6. REJECT (Dosen Wali)
+func (s *AchievementService) Reject(ctx context.Context, lecturerUserID uuid.UUID, achievementID uuid.UUID, note string) error {
+	ach, err := s.achRefRepo.FindByID(achievementID)
+	if err != nil {
+		return errors.New("achievement not found")
+	}
+
+	if ach.Status != "submitted" {
+		return errors.New("achievement is not in submitted status")
+	}
+
+	now := time.Now()
+	updateData := map[string]interface{}{
+		"status":         "rejected",
+		"verified_at":    &now,
+		"verified_by":    lecturerUserID,
+		"rejection_note": note,
+	}
+
+	return s.achRefRepo.VerifyOrReject(ach.ID, updateData)
 }

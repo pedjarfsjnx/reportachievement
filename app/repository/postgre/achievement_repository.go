@@ -38,6 +38,7 @@ func (r *AchievementRepository) FindAll(filter AchievementFilter) ([]postgre.Ach
 	if filter.StudentID != "" {
 		query = query.Where("student_id = ?", filter.StudentID)
 	}
+
 	// Jangan tampilkan status 'deleted' di list biasa
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
@@ -47,6 +48,7 @@ func (r *AchievementRepository) FindAll(filter AchievementFilter) ([]postgre.Ach
 
 	query.Count(&total)
 
+	// Preload Relasi
 	query = query.Preload("Student.User").Preload("Student").Preload("Verifier")
 
 	offset := (filter.Page - 1) * filter.Limit
@@ -54,8 +56,6 @@ func (r *AchievementRepository) FindAll(filter AchievementFilter) ([]postgre.Ach
 
 	return achievements, total, err
 }
-
-// --- BARU - MODUL 9 ---
 
 // FindByID (Untuk detail & cek ownership)
 func (r *AchievementRepository) FindByID(id uuid.UUID) (*postgre.AchievementReference, error) {
@@ -70,4 +70,10 @@ func (r *AchievementRepository) FindByID(id uuid.UUID) (*postgre.AchievementRefe
 // UpdateStatus (Untuk mengubah jadi 'deleted')
 func (r *AchievementRepository) UpdateStatus(id uuid.UUID, status string) error {
 	return r.db.Model(&postgre.AchievementReference{}).Where("id = ?", id).Update("status", status).Error
+}
+
+// --- BARU (MODUL 10): Update Status Lengkap (Verifikasi/Reject/Submit) ---
+func (r *AchievementRepository) VerifyOrReject(id uuid.UUID, data map[string]interface{}) error {
+	// Updates memungkinkan kita update beberapa field sekaligus (status, verified_at, verified_by, rejection_note)
+	return r.db.Model(&postgre.AchievementReference{}).Where("id = ?", id).Updates(data).Error
 }

@@ -47,25 +47,27 @@ func main() {
 	}()
 
 	// 2. Dependency Injection
-	userRepo := repoPostgre.NewUserRepository(dbPostgres)
-	authService := service.NewAuthService(userRepo)
 
+	// -- REPOSITORIES --
+	userRepo := repoPostgre.NewUserRepository(dbPostgres)
 	studentRepo := repoPostgre.NewStudentRepository(dbPostgres)
 	achRefRepo := repoPostgre.NewAchievementRepository(dbPostgres)
 	achMongoRepo := repoMongo.NewAchievementRepository(dbMongo.Db)
 
+	// -- SERVICES --
+	authService := service.NewAuthService(userRepo)
+	userService := service.NewUserService(userRepo) // <-- SERVICE BARU (MODUL 12)
 	achService := service.NewAchievementService(studentRepo, achRefRepo, achMongoRepo)
 
 	// 3. Init Fiber
 	app := fiber.New(fiber.Config{
-		// Naikkan limit jadi 50MB agar aman
 		BodyLimit: 50 * 1024 * 1024,
 	})
 
 	// --- MIDDLEWARE ---
-	app.Use(logger.New())  // Log dulu biar kelihatan request masuk
-	app.Use(recover.New()) // Tangkap panic
-	app.Use(cors.New())    // Handle CORS
+	app.Use(recover.New())
+	app.Use(cors.New())
+	app.Use(logger.New())
 
 	// 4. Folder Upload
 	if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
@@ -74,12 +76,13 @@ func main() {
 	}
 	app.Static("/uploads", "./uploads")
 
-	// 5. Routes
+	// 5. Register Routes
 	routePostgre.RegisterAuthRoutes(app, authService)
 	routePostgre.RegisterAchievementRoutes(app, achService)
+	routePostgre.RegisterUserRoutes(app, userService) // <-- ROUTE BARU (MODUL 12)
 
 	app.Get("/", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "Server OK"})
+		return c.JSON(fiber.Map{"message": "Server Report Achievement berjalan!"})
 	})
 
 	// 6. Run

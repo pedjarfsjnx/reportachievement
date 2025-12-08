@@ -1,9 +1,9 @@
-package mongo // Pastikan nama package ini benar
+package mongo
 
 import (
 	"context"
 	"log"
-	"os"
+	"reportachievement/config" // Import Config
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -15,26 +15,30 @@ type MongoInstance struct {
 	Db     *mongo.Database
 }
 
-func Connect() MongoInstance {
+func Connect(cfg *config.Config) MongoInstance {
+	// Gunakan URI dari Config
+	clientOptions := options.Client().ApplyURI(cfg.MongoURI)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Pastikan variable MONGO_URI ada di .env
-	clientOptions := options.Client().ApplyURI(os.Getenv("MONGO_URI"))
-
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
-		log.Fatal("❌ Gagal membuat client MongoDB: ", err)
+		log.Fatal("❌ Gagal koneksi ke MongoDB:", err)
 	}
 
-	if err := client.Ping(ctx, nil); err != nil {
-		log.Fatal("❌ Gagal ping ke MongoDB: ", err)
+	err = client.Ping(ctx, nil)
+	if err != nil {
+		log.Fatal("❌ Gagal Ping MongoDB:", err)
 	}
 
-	log.Println("✅ Berhasil koneksi ke MongoDB!")
+	log.Println("✅ Terkoneksi ke MongoDB!")
+
+	// Gunakan DB Name dari Config
+	db := client.Database(cfg.MongoDBName)
 
 	return MongoInstance{
 		Client: client,
-		Db:     client.Database(os.Getenv("MONGO_DB_NAME")),
+		Db:     db,
 	}
 }

@@ -16,26 +16,26 @@ import (
 
 type AchievementService struct {
 	studentRepo  *postgreRepo.StudentRepository
-	lecturerRepo *postgreRepo.LecturerRepository // <-- TAMBAHAN: Repo Dosen
+	lecturerRepo *postgreRepo.LecturerRepository
 	achRefRepo   *postgreRepo.AchievementRepository
 	achMongoRepo *mongoRepo.AchievementRepository
 }
 
 func NewAchievementService(
 	studentRepo *postgreRepo.StudentRepository,
-	lecturerRepo *postgreRepo.LecturerRepository, // <-- TAMBAHAN: Parameter Baru
+	lecturerRepo *postgreRepo.LecturerRepository,
 	achRefRepo *postgreRepo.AchievementRepository,
 	achMongoRepo *mongoRepo.AchievementRepository,
 ) *AchievementService {
 	return &AchievementService{
 		studentRepo:  studentRepo,
-		lecturerRepo: lecturerRepo, // <-- TAMBAHAN: Assign
+		lecturerRepo: lecturerRepo,
 		achRefRepo:   achRefRepo,
 		achMongoRepo: achMongoRepo,
 	}
 }
 
-// --- DTOs ---
+// ... (DTOs sama seperti sebelumnya) ...
 type CreateAchievementRequest struct {
 	Title       string                 `json:"title"`
 	Type        string                 `json:"type"`
@@ -64,7 +64,7 @@ type AttachmentDTO struct {
 
 // --- METHODS ---
 
-// 1. CREATE
+// Create Achievement
 func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req CreateAchievementRequest) (*postgreModel.AchievementReference, error) {
 	student, err := s.studentRepo.FindByUserID(userID)
 	if err != nil {
@@ -104,8 +104,43 @@ func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req C
 	return pgData, nil
 }
 
-// 2. GET ALL
-func (s *AchievementService) GetAll(ctx context.Context, filter postgreRepo.AchievementFilter) ([]AchievementListResponse, int64, error) {
+// 2.  Role Based Filtering di GetAll
+func (s *AchievementService) GetAll(ctx context.Context, userID uuid.UUID, userRole string, filter postgreRepo.AchievementFilter) ([]AchievementListResponse, int64, error) {
+
+	// --- LOGIKA FILTER BERDASARKAN ROLE ---
+	if userRole == "Mahasiswa" {
+		// Mahasiswa HANYA boleh lihat prestasi miliknya sendiri
+		student, err := s.studentRepo.FindByUserID(userID)
+		if err != nil {
+			return nil, 0, errors.New("student profile not found")
+		}
+		// Paksa filter hanya ID mahasiswa ini
+		filter.StudentIDs = []uuid.UUID{student.ID}
+
+	} else if userRole == "Dosen Wali" {
+		// Dosen HANYA boleh lihat prestasi mahasiswa bimbingannya
+		lecturer, err := s.lecturerRepo.FindByUserID(userID)
+		if err != nil {
+			return nil, 0, errors.New("lecturer profile not found")
+		}
+
+		// Cari semua ID mahasiswa yang dibimbing dosen ini
+		studentIDs, err := s.studentRepo.FindIDsByAdvisorID(lecturer.ID)
+		if err != nil {
+			return nil, 0, errors.New("failed to get advisees")
+		}
+
+		// Jika tidak punya mahasiswa bimbingan, return kosong langsung
+		if len(studentIDs) == 0 {
+			return []AchievementListResponse{}, 0, nil
+		}
+
+		// Paksa filter ID mahasiswa bimbingan
+		filter.StudentIDs = studentIDs
+	}
+	// Jika Admin, tidak ada filter tambahan (lihat semua)
+
+	// --- QUERY DATABASE ---
 	pgData, total, err := s.achRefRepo.FindAll(filter)
 	if err != nil {
 		return nil, 0, err
@@ -115,6 +150,7 @@ func (s *AchievementService) GetAll(ctx context.Context, filter postgreRepo.Achi
 		return []AchievementListResponse{}, 0, nil
 	}
 
+	// --- MERGE DATA MONGO ---
 	var mongoIDs []string
 	for _, item := range pgData {
 		mongoIDs = append(mongoIDs, item.MongoAchievementID)
@@ -169,38 +205,30 @@ func (s *AchievementService) Delete(ctx context.Context, userID uuid.UUID, achie
 	if err != nil {
 		return errors.New("achievement not found")
 	}
-
 	student, err := s.studentRepo.FindByUserID(userID)
 	if err != nil {
 		return errors.New("student profile not found")
 	}
-
 	if ach.StudentID != student.ID {
 		return errors.New("unauthorized: you do not own this achievement")
 	}
-
 	if ach.Status != "draft" {
 		return errors.New("cannot delete achievement with status: " + ach.Status)
 	}
-
 	if err := s.achMongoRepo.SoftDelete(ctx, ach.MongoAchievementID); err != nil {
 		return errors.New("failed to delete mongo data: " + err.Error())
 	}
-
 	if err := s.achRefRepo.UpdateStatus(ach.ID, "deleted"); err != nil {
 		return errors.New("failed to update status: " + err.Error())
 	}
-
 	return nil
 }
 
-// 4. SUBMIT
 func (s *AchievementService) Submit(ctx context.Context, userID uuid.UUID, achievementID uuid.UUID) error {
 	ach, err := s.achRefRepo.FindByID(achievementID)
 	if err != nil {
 		return errors.New("achievement not found")
 	}
-
 	student, err := s.studentRepo.FindByUserID(userID)
 	if err != nil {
 		return errors.New("student profile not found")
@@ -208,125 +236,75 @@ func (s *AchievementService) Submit(ctx context.Context, userID uuid.UUID, achie
 	if ach.StudentID != student.ID {
 		return errors.New("unauthorized action")
 	}
-
 	if ach.Status != "draft" {
 		return errors.New("only draft achievement can be submitted")
 	}
-
 	now := time.Now()
-	updateData := map[string]interface{}{
-		"status":       "submitted",
-		"submitted_at": &now,
-	}
-
+	updateData := map[string]interface{}{"status": "submitted", "submitted_at": &now}
 	return s.achRefRepo.VerifyOrReject(ach.ID, updateData)
 }
 
-// 5. VERIFY (UPDATE UTAMA: LOGIKA CEK DOSEN)
 func (s *AchievementService) Verify(ctx context.Context, lecturerUserID uuid.UUID, achievementID uuid.UUID) error {
-	// A. Cari Prestasi
 	ach, err := s.achRefRepo.FindByID(achievementID)
 	if err != nil {
 		return errors.New("achievement not found")
 	}
-
-	// B. Validasi Status
 	if ach.Status != "submitted" {
 		return errors.New("achievement is not in submitted status")
 	}
-
-	// C. Cari Profil Dosen yang sedang Login
 	lecturer, err := s.lecturerRepo.FindByUserID(lecturerUserID)
 	if err != nil {
 		return errors.New("access denied: you do not have a lecturer profile")
 	}
-
-	// D. Cek apakah Mahasiswa ini punya Advisor?
 	if ach.Student.AdvisorID == nil {
 		return errors.New("student does not have an assigned advisor")
 	}
-
-	// E. Cek Kecocokan (Apakah Dosen Login == Advisor Mahasiswa?)
 	if *ach.Student.AdvisorID != lecturer.ID {
 		return errors.New("unauthorized: you are not the advisor for this student")
 	}
-
 	now := time.Now()
-	updateData := map[string]interface{}{
-		"status":      "verified",
-		"verified_at": &now,
-		"verified_by": lecturerUserID,
-	}
-
+	updateData := map[string]interface{}{"status": "verified", "verified_at": &now, "verified_by": lecturerUserID}
 	return s.achRefRepo.VerifyOrReject(ach.ID, updateData)
 }
 
-// 6. REJECT (LOGIKA CEK DOSEN)
 func (s *AchievementService) Reject(ctx context.Context, lecturerUserID uuid.UUID, achievementID uuid.UUID, note string) error {
-	// A. Cari Prestasi
 	ach, err := s.achRefRepo.FindByID(achievementID)
 	if err != nil {
 		return errors.New("achievement not found")
 	}
-
-	// B. Validasi Status
 	if ach.Status != "submitted" {
 		return errors.New("achievement is not in submitted status")
 	}
-
-	// C. Cari Profil Dosen yang sedang Login
 	lecturer, err := s.lecturerRepo.FindByUserID(lecturerUserID)
 	if err != nil {
 		return errors.New("access denied: you do not have a lecturer profile")
 	}
-
-	// D. Cek Advisor
 	if ach.Student.AdvisorID == nil {
 		return errors.New("student does not have an assigned advisor")
 	}
-
-	// E. Cek Kecocokan
 	if *ach.Student.AdvisorID != lecturer.ID {
 		return errors.New("unauthorized: you are not the advisor for this student")
 	}
-
 	now := time.Now()
-	updateData := map[string]interface{}{
-		"status":         "rejected",
-		"verified_at":    &now,
-		"verified_by":    lecturerUserID,
-		"rejection_note": note,
-	}
-
+	updateData := map[string]interface{}{"status": "rejected", "verified_at": &now, "verified_by": lecturerUserID, "rejection_note": note}
 	return s.achRefRepo.VerifyOrReject(ach.ID, updateData)
 }
 
-// 7. UPLOAD EVIDENCE
 func (s *AchievementService) UploadEvidence(ctx context.Context, userID uuid.UUID, achievementID uuid.UUID, file AttachmentDTO) error {
 	ach, err := s.achRefRepo.FindByID(achievementID)
 	if err != nil {
 		return errors.New("achievement not found")
 	}
-
 	student, err := s.studentRepo.FindByUserID(userID)
 	if err != nil {
 		return errors.New("student profile not found")
 	}
-
 	if ach.StudentID != student.ID {
 		return errors.New("unauthorized action")
 	}
-
 	if ach.Status != "draft" && ach.Status != "rejected" {
 		return errors.New("cannot upload evidence for status: " + ach.Status)
 	}
-
-	attachment := mongoModel.Attachment{
-		FileName:   file.FileName,
-		FileURL:    file.FileURL,
-		FileType:   file.FileType,
-		UploadedAt: time.Now(),
-	}
-
+	attachment := mongoModel.Attachment{FileName: file.FileName, FileURL: file.FileURL, FileType: file.FileType, UploadedAt: time.Now()}
 	return s.achMongoRepo.AddAttachment(ctx, ach.MongoAchievementID, attachment)
 }

@@ -1,0 +1,33 @@
+2025/12/08 15:23:17 ❌ Gagal koneksi ke PostgreSQL:failed to connect to `user=postgres database=report_achievement`: [::1]:5432 (localhost): failed SASL auth: FATAL: password authentication failed for user "postgres" (SQLSTATE 28P01)
+2025/12/08 15:25:30 ❌ Gagal koneksi ke PostgreSQL:failed to connect to `user=postgres database=report_achievement`: [::1]:5432 (localhost): failed SASL auth: FATAL: password authentication failed for user "postgres" (SQLSTATE 28P01)
+2025/12/08 15:28:03 ✅ Terkoneksi ke PostgreSQL!
+2025/12/08 15:28:03 ✅ Terkoneksi ke MongoDB!
+2025/12/08 15:28:03 🚀 Server running on port :3000
+15:29:05 | 200 |     81.9682ms | 127.0.0.1 | POST | /api/v1/auth/login | -
+15:29:10 | 200 |      76.258ms | 127.0.0.1 | POST | /api/v1/auth/login | -
+15:29:17 | 200 |    186.8747ms | 127.0.0.1 | POST | /api/v1/auth/login | -
+15:31:04 | 200 |    148.3171ms | 127.0.0.1 | POST | /api/v1/auth/login | -
+15:32:04 | 201 |     25.0006ms | 127.0.0.1 | POST | /api/v1/achievements | -
+2025/12/08 15:33:10 ✅ [UPLOAD] Success: 1765182790_juara 1 csec.png
+15:33:10 | 200 |      13.544ms | 127.0.0.1 | POST | /api/v1/achievements/833d1872-f41d-4f5d-9938-c7ece3002009/attachments | -
+15:34:03 | 200 |     16.7597ms | 127.0.0.1 | POST | /api/v1/achievements/833d1872-f41d-4f5d-9938-c7ece3002009/submit | -
+15:34:35 | 200 |    151.3511ms | 127.0.0.1 | POST | /api/v1/auth/login | -
+15:35:20 | 400 |      1.6985ms | 127.0.0.1 | POST | /api/v1/achievements/833d1872-f41d-4f5d-9938-c7ece3002009/verify | -
+15:35:32 | 400 |      1.3207ms | 127.0.0.1 | POST | /api/v1/achievements/833d1872-f41d-4f5d-9938-c7ece3002009/reject | -
+15:35:41 | 200 |     98.8134ms | 127.0.0.1 | POST | /api/v1/auth/login | -
+15:35:51 | 200 |     13.8363ms | 127.0.0.1 | POST | /api/v1/achievements/833d1872-f41d-4f5d-9938-c7ece3002009/verify | -
+15:37:25 | 200 |     28.5171ms | 127.0.0.1 | GET | /api/v1/achievements | -
+15:38:05 | 200 |    115.1459ms | 127.0.0.1 | POST | /api/v1/auth/login | -
+15:38:15 | 200 |      5.1541ms | 127.0.0.1 | GET | /api/v1/achievements | -
+15:38:19 | 200 |     18.6389ms | 127.0.0.1 | GET | /api/v1/achievements | -
+15:39:22 | 200 |     15.0749ms | 127.0.0.1 | GET | /api/v1/achievements | -
+2025/12/08 15:44:22 ✅ Terkoneksi ke PostgreSQL!
+2025/12/08 15:44:22 ✅ Terkoneksi ke MongoDB!
+2025/12/08 15:44:22 🚀 Server running on port :3000
+15:45:24 | 200 |      9.1295ms | 127.0.0.1 | GET | /api/v1/achievements | -
+15:45:38 | 200 |    116.3346ms | 127.0.0.1 | POST | /api/v1/auth/login | -
+15:45:42 | 200 |      78.319ms | 127.0.0.1 | POST | /api/v1/auth/login | -
+15:45:51 | 200 |      4.1832ms | 127.0.0.1 | GET | /api/v1/achievements | -
+15:45:53 | 200 |      2.4235ms | 127.0.0.1 | GET | /api/v1/achievements | -
+15:46:04 | 200 |    145.6854ms | 127.0.0.1 | POST | /api/v1/auth/login | -
+15:46:16 | 200 |     10.6149ms | 127.0.0.1 | GET | /api/v1/achievements | -

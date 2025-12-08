@@ -15,64 +15,70 @@ func NewAchievementRepository(db *gorm.DB) *AchievementRepository {
 	return &AchievementRepository{db: db}
 }
 
-// Create
+// UPDATE STRUCT FILTER
+type AchievementFilter struct {
+	Page       int
+	Limit      int
+	Status     string
+	StudentIDs []uuid.UUID // <-- TAMBAHAN: Filter Array ID Mahasiswa
+}
+
+// 1. CREATE
 func (r *AchievementRepository) Create(data *postgre.AchievementReference) error {
 	return r.db.Create(data).Error
 }
 
-// Filter Struct
-type AchievementFilter struct {
-	StudentID string
-	Status    string
-	Page      int
-	Limit     int
-}
-
-// FindAll (List)
+// 2. FIND ALL (UPDATE QUERY)
 func (r *AchievementRepository) FindAll(filter AchievementFilter) ([]postgre.AchievementReference, int64, error) {
 	var achievements []postgre.AchievementReference
 	var total int64
 
-	query := r.db.Model(&postgre.AchievementReference{})
+	// Base Query (Preload User & Student data)
+	query := r.db.Model(&postgre.AchievementReference{}).
+		Preload("Student").
+		Preload("Student.User")
 
-	if filter.StudentID != "" {
-		query = query.Where("student_id = ?", filter.StudentID)
-	}
-
-	// Jangan tampilkan status 'deleted' di list biasa
+	// Filter Status
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
 	} else {
+		// Default: Jangan tampilkan yang deleted
 		query = query.Where("status != ?", "deleted")
 	}
 
-	query.Count(&total)
+	// --- Filter Spesifik Mahasiswa ---
+	if len(filter.StudentIDs) > 0 {
+		query = query.Where("student_id IN ?", filter.StudentIDs)
+	}
+	// ----------------------------------------------
 
-	// Preload Relasi
-	query = query.Preload("Student.User").Preload("Student").Preload("Verifier")
+	// Hitung Total Data (Untuk Pagination)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 
+	// Pagination
 	offset := (filter.Page - 1) * filter.Limit
-	err := query.Offset(offset).Limit(filter.Limit).Order("created_at DESC").Find(&achievements).Error
+	err := query.Limit(filter.Limit).Offset(offset).Order("created_at DESC").Find(&achievements).Error
 
 	return achievements, total, err
 }
 
-// FindByID (Untuk detail & cek ownership)
+// 3. FIND BY ID
 func (r *AchievementRepository) FindByID(id uuid.UUID) (*postgre.AchievementReference, error) {
-	var ach postgre.AchievementReference
-	err := r.db.Preload("Student").First(&ach, "id = ?", id).Error
-	if err != nil {
-		return nil, err
-	}
-	return &ach, nil
+	var achievement postgre.AchievementReference
+	err := r.db.Preload("Student").
+		Preload("Student.User").
+		First(&achievement, "id = ?", id).Error
+	return &achievement, err
 }
 
-// UpdateStatus (Untuk mengubah jadi 'deleted')
+// 4. VERIFY OR REJECT (Update Status)
+func (r *AchievementRepository) VerifyOrReject(id uuid.UUID, updates map[string]interface{}) error {
+	return r.db.Model(&postgre.AchievementReference{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// 5. UPDATE STATUS (Soft Delete)
 func (r *AchievementRepository) UpdateStatus(id uuid.UUID, status string) error {
 	return r.db.Model(&postgre.AchievementReference{}).Where("id = ?", id).Update("status", status).Error
-}
-
-func (r *AchievementRepository) VerifyOrReject(id uuid.UUID, data map[string]interface{}) error {
-	// Updates memungkinkan kita update beberapa field sekaligus (status, verified_at, verified_by, rejection_note)
-	return r.db.Model(&postgre.AchievementReference{}).Where("id = ?", id).Updates(data).Error
 }

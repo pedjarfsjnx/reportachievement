@@ -8,35 +8,34 @@ import (
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
-	// Import Models
 	mongoModel "reportachievement/app/model/mongo"
 	postgreModel "reportachievement/app/model/postgre"
-
-	// Import Repositories
 	mongoRepo "reportachievement/app/repository/mongo"
 	postgreRepo "reportachievement/app/repository/postgre"
 )
 
 type AchievementService struct {
 	studentRepo  *postgreRepo.StudentRepository
+	lecturerRepo *postgreRepo.LecturerRepository // <-- TAMBAHAN: Repo Dosen
 	achRefRepo   *postgreRepo.AchievementRepository
 	achMongoRepo *mongoRepo.AchievementRepository
 }
 
 func NewAchievementService(
 	studentRepo *postgreRepo.StudentRepository,
+	lecturerRepo *postgreRepo.LecturerRepository, // <-- TAMBAHAN: Parameter Baru
 	achRefRepo *postgreRepo.AchievementRepository,
 	achMongoRepo *mongoRepo.AchievementRepository,
 ) *AchievementService {
 	return &AchievementService{
 		studentRepo:  studentRepo,
+		lecturerRepo: lecturerRepo, // <-- TAMBAHAN: Assign
 		achRefRepo:   achRefRepo,
 		achMongoRepo: achMongoRepo,
 	}
 }
 
-// --- STRUCTS (DTO) ---
-
+// --- DTOs ---
 type CreateAchievementRequest struct {
 	Title       string                 `json:"title"`
 	Type        string                 `json:"type"`
@@ -57,7 +56,6 @@ type AchievementListResponse struct {
 	CreatedAt   string                 `json:"created_at"`
 }
 
-// DTO Baru untuk File
 type AttachmentDTO struct {
 	FileName string
 	FileURL  string
@@ -66,7 +64,7 @@ type AttachmentDTO struct {
 
 // --- METHODS ---
 
-// 1. CREATE ACHIEVEMENT
+// 1. CREATE
 func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req CreateAchievementRequest) (*postgreModel.AchievementReference, error) {
 	student, err := s.studentRepo.FindByUserID(userID)
 	if err != nil {
@@ -83,7 +81,7 @@ func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req C
 		Points:            req.Points,
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
-		Attachments:       []mongoModel.Attachment{}, // Init array kosong
+		Attachments:       []mongoModel.Attachment{},
 	}
 
 	mongoID, err := s.achMongoRepo.Insert(ctx, mongoData)
@@ -106,7 +104,7 @@ func (s *AchievementService) Create(ctx context.Context, userID uuid.UUID, req C
 	return pgData, nil
 }
 
-// 2. GET ALL ACHIEVEMENTS
+// 2. GET ALL
 func (s *AchievementService) GetAll(ctx context.Context, filter postgreRepo.AchievementFilter) ([]AchievementListResponse, int64, error) {
 	pgData, total, err := s.achRefRepo.FindAll(filter)
 	if err != nil {
@@ -165,7 +163,7 @@ func (s *AchievementService) GetAll(ctx context.Context, filter postgreRepo.Achi
 	return response, total, nil
 }
 
-// 3. DELETE (Soft Delete)
+// 3. DELETE
 func (s *AchievementService) Delete(ctx context.Context, userID uuid.UUID, achievementID uuid.UUID) error {
 	ach, err := s.achRefRepo.FindByID(achievementID)
 	if err != nil {
@@ -196,7 +194,7 @@ func (s *AchievementService) Delete(ctx context.Context, userID uuid.UUID, achie
 	return nil
 }
 
-// 4. SUBMIT (Mahasiswa)
+// 4. SUBMIT
 func (s *AchievementService) Submit(ctx context.Context, userID uuid.UUID, achievementID uuid.UUID) error {
 	ach, err := s.achRefRepo.FindByID(achievementID)
 	if err != nil {
@@ -224,15 +222,33 @@ func (s *AchievementService) Submit(ctx context.Context, userID uuid.UUID, achie
 	return s.achRefRepo.VerifyOrReject(ach.ID, updateData)
 }
 
-// 5. VERIFY (Dosen Wali)
+// 5. VERIFY (UPDATE UTAMA: LOGIKA CEK DOSEN)
 func (s *AchievementService) Verify(ctx context.Context, lecturerUserID uuid.UUID, achievementID uuid.UUID) error {
+	// A. Cari Prestasi
 	ach, err := s.achRefRepo.FindByID(achievementID)
 	if err != nil {
 		return errors.New("achievement not found")
 	}
 
+	// B. Validasi Status
 	if ach.Status != "submitted" {
 		return errors.New("achievement is not in submitted status")
+	}
+
+	// C. Cari Profil Dosen yang sedang Login
+	lecturer, err := s.lecturerRepo.FindByUserID(lecturerUserID)
+	if err != nil {
+		return errors.New("access denied: you do not have a lecturer profile")
+	}
+
+	// D. Cek apakah Mahasiswa ini punya Advisor?
+	if ach.Student.AdvisorID == nil {
+		return errors.New("student does not have an assigned advisor")
+	}
+
+	// E. Cek Kecocokan (Apakah Dosen Login == Advisor Mahasiswa?)
+	if *ach.Student.AdvisorID != lecturer.ID {
+		return errors.New("unauthorized: you are not the advisor for this student")
 	}
 
 	now := time.Now()
@@ -245,15 +261,33 @@ func (s *AchievementService) Verify(ctx context.Context, lecturerUserID uuid.UUI
 	return s.achRefRepo.VerifyOrReject(ach.ID, updateData)
 }
 
-// 6. REJECT (Dosen Wali)
+// 6. REJECT (LOGIKA CEK DOSEN)
 func (s *AchievementService) Reject(ctx context.Context, lecturerUserID uuid.UUID, achievementID uuid.UUID, note string) error {
+	// A. Cari Prestasi
 	ach, err := s.achRefRepo.FindByID(achievementID)
 	if err != nil {
 		return errors.New("achievement not found")
 	}
 
+	// B. Validasi Status
 	if ach.Status != "submitted" {
 		return errors.New("achievement is not in submitted status")
+	}
+
+	// C. Cari Profil Dosen yang sedang Login
+	lecturer, err := s.lecturerRepo.FindByUserID(lecturerUserID)
+	if err != nil {
+		return errors.New("access denied: you do not have a lecturer profile")
+	}
+
+	// D. Cek Advisor
+	if ach.Student.AdvisorID == nil {
+		return errors.New("student does not have an assigned advisor")
+	}
+
+	// E. Cek Kecocokan
+	if *ach.Student.AdvisorID != lecturer.ID {
+		return errors.New("unauthorized: you are not the advisor for this student")
 	}
 
 	now := time.Now()
@@ -267,9 +301,8 @@ func (s *AchievementService) Reject(ctx context.Context, lecturerUserID uuid.UUI
 	return s.achRefRepo.VerifyOrReject(ach.ID, updateData)
 }
 
-// UPLOAD EVIDENCE ---
+// 7. UPLOAD EVIDENCE
 func (s *AchievementService) UploadEvidence(ctx context.Context, userID uuid.UUID, achievementID uuid.UUID, file AttachmentDTO) error {
-	// A. Cek Kepemilikan & Status
 	ach, err := s.achRefRepo.FindByID(achievementID)
 	if err != nil {
 		return errors.New("achievement not found")
@@ -284,12 +317,10 @@ func (s *AchievementService) UploadEvidence(ctx context.Context, userID uuid.UUI
 		return errors.New("unauthorized action")
 	}
 
-	// Boleh upload jika status draft atau rejected (untuk perbaikan)
 	if ach.Status != "draft" && ach.Status != "rejected" {
 		return errors.New("cannot upload evidence for status: " + ach.Status)
 	}
 
-	// B. Simpan Metadata ke MongoDB
 	attachment := mongoModel.Attachment{
 		FileName:   file.FileName,
 		FileURL:    file.FileURL,

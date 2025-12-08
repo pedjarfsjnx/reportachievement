@@ -23,8 +23,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
 
-	// Import Swagger
-	_ "reportachievement/docs" // Folder ini akan dibuat otomatis oleh 'swag init'
+	_ "reportachievement/docs"
 
 	"github.com/gofiber/swagger"
 )
@@ -44,7 +43,7 @@ func main() {
 		log.Println("Warning: .env file not found")
 	}
 
-	// 1. Init DB
+	// 1. Init DB Postgres
 	dbPostgres := postgres.Connect()
 	dbPostgres.AutoMigrate(
 		&postgre.Role{}, &postgre.User{}, &postgre.Permission{}, &postgre.RolePermission{},
@@ -54,6 +53,7 @@ func main() {
 	sqlDB, _ := dbPostgres.DB()
 	defer sqlDB.Close()
 
+	// 2. Init DB Mongo
 	dbMongo := mongo.Connect()
 	defer func() {
 		if err := dbMongo.Client.Disconnect(context.TODO()); err != nil {
@@ -61,18 +61,25 @@ func main() {
 		}
 	}()
 
-	// 2. DI (Dependency Injection)
+	// 3. Dependency Injection
+
+	// -- REPOSITORIES --
 	userRepo := repoPostgre.NewUserRepository(dbPostgres)
 	studentRepo := repoPostgre.NewStudentRepository(dbPostgres)
 	achRefRepo := repoPostgre.NewAchievementRepository(dbPostgres)
+	lecturerRepo := repoPostgre.NewLecturerRepository(dbPostgres) // <-- 1. REPO BARU
 	achMongoRepo := repoMongo.NewAchievementRepository(dbMongo.Db)
 
+	// -- SERVICES --
 	authService := service.NewAuthService(userRepo)
 	userService := service.NewUserService(userRepo)
-	achService := service.NewAchievementService(studentRepo, achRefRepo, achMongoRepo)
+
+	// <-- 2. INJECT LECTURER REPO KE ACHIEVEMENT SERVICE
+	achService := service.NewAchievementService(studentRepo, lecturerRepo, achRefRepo, achMongoRepo)
+
 	reportService := service.NewReportService(achMongoRepo, studentRepo)
 
-	// 3. Init Fiber
+	// 4. Init Fiber
 	app := fiber.New(fiber.Config{
 		BodyLimit: 50 * 1024 * 1024,
 	})
@@ -81,22 +88,23 @@ func main() {
 	app.Use(cors.New())
 	app.Use(logger.New())
 
-	// 4. Static Files
+	// 5. Static Files
 	if _, err := os.Stat("./uploads"); os.IsNotExist(err) {
 		os.Mkdir("./uploads", 0755)
 	}
 	app.Static("/uploads", "./uploads")
+	app.Static("/", "./public")
 
-	// 5. Swagger Route
+	// 6. Swagger
 	app.Get("/swagger/*", swagger.HandlerDefault)
 
-	// 6. Register API Routes
+	// 7. Register Routes
 	routePostgre.RegisterAuthRoutes(app, authService)
 	routePostgre.RegisterAchievementRoutes(app, achService)
 	routePostgre.RegisterUserRoutes(app, userService)
 	routePostgre.RegisterReportRoutes(app, reportService)
 
-	// 7. Run
+	// 8. Run Server
 	port := os.Getenv("APP_PORT")
 	if port == "" {
 		port = ":3000"

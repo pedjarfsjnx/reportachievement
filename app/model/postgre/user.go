@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// SRS Halaman 4: 3.1.2 Tabel roles [cite: 40]
+// Tabel roles
 type Role struct {
 	ID          uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	Name        string    `gorm:"type:varchar(50);unique;not null"`
@@ -15,7 +15,7 @@ type Role struct {
 	UpdatedAt   time.Time
 }
 
-// SRS Halaman 4: 3.1.1 Tabel users [cite: 36]
+// Tabel users
 type User struct {
 	ID           uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	Username     string    `gorm:"type:varchar(50);unique;not null"`
@@ -29,7 +29,7 @@ type User struct {
 	UpdatedAt    time.Time
 }
 
-// SRS Halaman 4: 3.1.3 Permissions & 3.1.4 RolePermissions [cite: 51, 67]
+// S Permissions & RolePermissions
 type Permission struct {
 	ID          uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	Name        string    `gorm:"type:varchar(100);unique;not null"` // e.g., achievement:create

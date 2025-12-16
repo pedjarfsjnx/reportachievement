@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// SRS Halaman 5: 3.1.6 Tabel lecturers
+// Tabel lecturers
 type Lecturer struct {
 	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID     uuid.UUID `gorm:"type:uuid;not null"`
@@ -17,7 +17,7 @@ type Lecturer struct {
 	UpdatedAt  time.Time
 }
 
-// SRS Halaman 5: 3.1.5 Tabel students
+// Tabel students
 type Student struct {
 	ID     uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID uuid.UUID `gorm:"type:uuid;not null"`

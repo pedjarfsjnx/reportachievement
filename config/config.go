@@ -15,7 +15,7 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	// Load .env, abaikan error jika file tidak ada (mungkin pakai system env)
+	// Load .env
 	_ = godotenv.Load()
 
 	return &Config{

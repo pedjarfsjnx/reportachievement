@@ -30,7 +30,7 @@ import (
 
 // Swagger annotations...
 func main() {
-	// 1. Load Config (Menggantikan godotenv.Load manual)
+	// 1. Load Config
 	cfg := config.LoadConfig()
 
 	// 2. Setup File Logging (Menulis ke folder /logs)

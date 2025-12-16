@@ -35,7 +35,6 @@ func NewAchievementService(
 	}
 }
 
-// ... (DTOs sama seperti sebelumnya) ...
 type CreateAchievementRequest struct {
 	Title       string                 `json:"title"`
 	Type        string                 `json:"type"`

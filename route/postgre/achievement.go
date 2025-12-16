@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"reportachievement/app/repository/postgre"
 	"reportachievement/app/service"
-	"reportachievement/helper" // Asumsi pakai helper yang sudah dibuat
+	"reportachievement/helper"
 	"reportachievement/middleware"
 	"strconv"
 	"time"
@@ -55,7 +55,7 @@ func (h *AchievementHandler) Create(c *fiber.Ctx) error {
 	return helper.Success(c, 201, "Achievement draft created", result)
 }
 
-// GET LIST (UPDATE UTAMA)
+// GET LIST
 func (h *AchievementHandler) GetList(c *fiber.Ctx) error {
 	// 1. Ambil User ID dari Token
 	userID, err := getUserID(c)

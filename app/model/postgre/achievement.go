@@ -6,7 +6,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// SRS Halaman 5: 3.1.7 Tabel achievement_references [cite: 92]
+//	Tabel achievement_references
+//
 // Ditambah status 'deleted'
 type AchievementReference struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`

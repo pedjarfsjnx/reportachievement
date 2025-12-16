@@ -51,7 +51,7 @@ func (s *AuthService) Login(username, password string) (*LoginResponse, error) {
 }
 
 func (s *AuthService) generateJWT(user *postgre.User) (string, error) {
-	// Secret key dari .env (nanti kita tambahkan)
+	// Secret key dari .env
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		jwtSecret = "rahasia-default-jangan-dipakai-di-prod"

@@ -61,3 +61,9 @@
 18:57:48 | 401 |            0s | 127.0.0.1 | GET | /api/v1/reports/statistics | -
 18:57:50 | 401 |            0s | 127.0.0.1 | GET | /api/v1/reports/statistics | -
 18:58:46 | 401 |            0s | 127.0.0.1 | GET | /api/v1/reports/statistics | -
+2025/12/16 18:05:50 ✅ Terkoneksi ke PostgreSQL!
+2025/12/16 18:05:50 ✅ Terkoneksi ke MongoDB!
+2025/12/16 18:05:50 🚀 Server running on port :3000
+2025/12/16 18:15:12 ✅ Terkoneksi ke PostgreSQL!
+2025/12/16 18:15:12 ✅ Terkoneksi ke MongoDB!
+2025/12/16 18:15:12 🚀 Server running on port :3000

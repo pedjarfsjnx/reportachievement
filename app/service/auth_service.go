@@ -2,69 +2,73 @@ package service
 
 import (
 	"errors"
-	"os"
 	"reportachievement/app/model/postgre"
-	repo "reportachievement/app/repository/postgre"
+	"reportachievement/app/repository" // Import Interface
+	"reportachievement/config"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthService struct {
-	userRepo *repo.UserRepository
+	userRepo repository.IUserRepository // Gunakan Interface
 }
 
-func NewAuthService(userRepo *repo.UserRepository) *AuthService {
+// Constructor terima Interface
+func NewAuthService(userRepo repository.IUserRepository) *AuthService {
 	return &AuthService{userRepo: userRepo}
 }
 
-// Struct untuk response login
-type LoginResponse struct {
-	Token string        `json:"token"`
-	User  *postgre.User `json:"user"`
-}
-
-func (s *AuthService) Login(username, password string) (*LoginResponse, error) {
-	// 1. Cari user by username
+func (s *AuthService) Login(username, password string) (map[string]interface{}, error) {
+	// 1. Cari User
 	user, err := s.userRepo.FindByUsername(username)
 	if err != nil {
 		return nil, errors.New("invalid username or password")
 	}
 
-	// 2. Cek Password (Bcrypt)
-	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
-	if err != nil {
+	// 2. Cek Password
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return nil, errors.New("invalid username or password")
 	}
 
-	// 3. Generate JWT Token
-	token, err := s.generateJWT(user)
+	if !user.IsActive {
+		return nil, errors.New("account is inactive")
+	}
+
+	// 3. Generate JWT
+	cfg := config.LoadConfig()
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id":  user.ID,
+		"username": user.Username,
+		"role":     user.Role.Name,
+		"exp":      time.Now().Add(24 * time.Hour).Unix(),
+	})
+
+	tokenString, err := token.SignedString([]byte(cfg.JWTSecret))
 	if err != nil {
 		return nil, err
 	}
 
-	return &LoginResponse{
-		Token: token,
-		User:  user,
+	return map[string]interface{}{
+		"token": tokenString,
+		"user": map[string]interface{}{
+			"id":       user.ID,
+			"username": user.Username,
+			"role":     user.Role.Name,
+			"fullName": user.FullName,
+		},
 	}, nil
 }
 
-func (s *AuthService) generateJWT(user *postgre.User) (string, error) {
-	// Secret key dari .env
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "rahasia-default-jangan-dipakai-di-prod"
+// Get Profile ---
+func (s *AuthService) GetProfile(userID uuid.UUID) (*postgre.User, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("user not found")
 	}
-
-	// Claims (isi payload token)
-	claims := jwt.MapClaims{
-		"user_id":  user.ID,
-		"username": user.Username,
-		"role":     user.Role.Name,                        // Penting untuk RBAC nanti
-		"exp":      time.Now().Add(time.Hour * 24).Unix(), // Expired 24 jam
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(jwtSecret))
+	//
+	user.PasswordHash = ""
+	return user, nil
 }

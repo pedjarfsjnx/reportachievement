@@ -8,28 +8,35 @@ import (
 
 // Tabel lecturers
 type Lecturer struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID     uuid.UUID `gorm:"type:uuid;not null"`
-	User       User      `gorm:"foreignKey:UserID"`
-	LecturerID string    `gorm:"type:varchar(20);unique;not null"` // NIP/NIDN
-	Department string    `gorm:"type:varchar(100)"`
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID     uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	UserID uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
+	User   User      `gorm:"foreignKey:UserID" json:"user"`
+
+	// Ganti column:lecturer_id menjadi column:nip
+	// JSON tetap "lecturer_id" sesuai SRS
+	LecturerID string `gorm:"type:varchar(20);unique;not null;column:nip" json:"lecturer_id"`
+
+	Department string    `gorm:"type:varchar(100)" json:"department"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // Tabel students
 type Student struct {
-	ID     uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID uuid.UUID `gorm:"type:uuid;not null"`
-	User   User      `gorm:"foreignKey:UserID"`
+	ID     uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	UserID uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
+	User   User      `gorm:"foreignKey:UserID" json:"user"`
 
-	NIM string `gorm:"type:varchar(20);unique;not null"`
-	// -------------------------
+	// Ganti column:student_id menjadi column:nim
+	// Agar GORM tidak mengira ini Foreign Key ke achievement
+	// JSON tetap "student_id" sesuai SRS
+	NIM string `gorm:"type:varchar(20);unique;not null;column:nim" json:"student_id"`
 
-	ProgramStudy string     `gorm:"type:varchar(100)"`
-	AcademicYear string     `gorm:"type:varchar(10)"` // e.g., "2024/2025"
-	AdvisorID    *uuid.UUID `gorm:"type:uuid"`        // Boleh null jika belum dapat dosen wali
-	Advisor      *Lecturer  `gorm:"foreignKey:AdvisorID"`
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ProgramStudy string     `gorm:"type:varchar(100)" json:"program_study"`
+	AcademicYear string     `gorm:"type:varchar(10)" json:"academic_year"`
+	AdvisorID    *uuid.UUID `gorm:"type:uuid" json:"advisor_id"`
+	Advisor      *Lecturer  `gorm:"foreignKey:AdvisorID" json:"advisor"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

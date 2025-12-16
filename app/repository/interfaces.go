@@ -4,7 +4,7 @@ import (
 	"context"
 	mongoModel "reportachievement/app/model/mongo"
 	"reportachievement/app/model/postgre"
-	postgreRepo "reportachievement/app/repository/postgre" // Untuk akses struct AchievementFilter
+	postgreRepo "reportachievement/app/repository/postgre" // Import untuk struct AchievementFilter
 
 	"github.com/google/uuid"
 )
